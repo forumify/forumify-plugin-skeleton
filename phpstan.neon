@@ -1,0 +1,18 @@
+includes:
+    - vendor/phpstan/phpstan-symfony/extension.neon
+    - vendor/phpstan/phpstan-symfony/rules.neon
+parameters:
+    level: 8
+    paths:
+        - src
+# skeleton:if entities
+    # The doctrine exclusions below don't apply until you have entities that trigger them.
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        # Doctrine assigns these, phpstan cannot see it happen.
+        -
+            messages:
+                - '#Property .+ is never written, only read.#'
+                - '#Property .+ is never assigned .+ so it can be removed from the property type.#'
+            path: src/Entity/*
+# skeleton:endif

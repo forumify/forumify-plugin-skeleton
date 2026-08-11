@@ -1,0 +1,14 @@
+# skeleton:if frontend
+plugin_skeleton:
+    resource: ../src/Controller
+    type: attribute
+    name_prefix: forumify_plugin_skeleton_
+# skeleton:endif
+
+# skeleton:if admin
+plugin_skeleton_admin:
+    resource: ../src/Admin/Controller
+    type: attribute
+    name_prefix: forumify_admin_
+    prefix: admin/
+# skeleton:endif
