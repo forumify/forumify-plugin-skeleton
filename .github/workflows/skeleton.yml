@@ -1,0 +1,71 @@
+# Verifies the generator itself: generates plugins from this working copy and runs their
+# quality checks and test suites. Removed from generated plugins.
+name: Skeleton
+on:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+
+jobs:
+  generate:
+    name: Generate (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: everything
+            features: tests,ci
+          - name: no tests
+            features: ci
+          - name: nothing
+            features: ''
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          path: skeleton
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer
+          extensions: mbstring, xml, ctype, iconv, intl, mysql
+
+      - name: Generate a plugin
+        env:
+          SKELETON_PACKAGE: acme/generated-plugin
+          SKELETON_NAME: Generated
+          SKELETON_FEATURES: ${{ matrix.features }}
+        run: |
+          composer create-project forumify/plugin-skeleton generated \
+            --repository='{"type":"path","url":"./skeleton","options":{"symlink":false}}' \
+            --stability=dev --no-interaction --no-progress
+
+      - name: Check that the skeleton removed itself
+        working-directory: generated
+        run: |
+          test ! -d skeleton
+          test -f README.md
+          ! grep -rq "PluginSkeleton" --include='*.php' --include='*.json' src composer.json
+
+      - name: Run quality checks
+        working-directory: generated
+        run: make quality
+
+      - name: Run tests
+        if: contains(matrix.features, 'tests')
+        working-directory: generated
+        run: make tests

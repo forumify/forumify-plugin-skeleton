@@ -3,6 +3,8 @@ services:
         autowire: true
         autoconfigure: true
 
+    # Everything in src/ becomes a service, so controllers, subscribers and your own
+    # classes are wired up without any further configuration.
     Forumify\PluginSkeleton\:
         resource: '../src/'
         exclude:

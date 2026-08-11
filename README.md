@@ -1,8 +1,10 @@
 # forumify plugin skeleton
 
-Generates a ready-to-develop [forumify](https://forumify.net) plugin: quality tooling, a
-test suite wired up to forumify's test kit, GitHub Actions workflows, and a README that
-explains how to get going.
+Generates a bare [forumify](https://forumify.net) plugin: registered with the platform,
+with quality tooling, a test suite wired up to forumify's test kit, GitHub Actions
+workflows and a README explaining where things go.
+
+No example controllers, entities or templates — nothing to delete before you start.
 
 ## Usage
 
@@ -10,9 +12,8 @@ explains how to get going.
 composer create-project forumify/plugin-skeleton my-plugin
 ```
 
-The generator asks for your package name, namespace, license and which parts you want to
-start with, then rewrites the skeleton into your plugin and removes itself. Everything you
-decline is simply not generated.
+The generator asks for your package name, namespace, license and whether you want tests
+and CI, then rewrites the skeleton into your plugin and removes itself.
 
 Add `--no-interaction` to take every default, deriving the package name from the target
 directory. Useful in scripts:
@@ -29,7 +30,7 @@ repository's own CI checks the generator:
 ```bash
 SKELETON_PACKAGE=acme/todo-plugin \
 SKELETON_NAME=Todo \
-SKELETON_FEATURES=entities,frontend,tests,ci \
+SKELETON_FEATURES=tests,ci \
 composer create-project forumify/plugin-skeleton my-plugin --no-interaction
 ```
 
@@ -46,7 +47,7 @@ composer create-project forumify/plugin-skeleton my-plugin --no-interaction
 | `SKELETON_PLATFORM` | minimum forumify version |
 | `SKELETON_FEATURES` | comma separated list of the features to include, everything else is left out |
 
-Valid features: `entities`, `admin`, `frontend`, `api`, `assets`, `tests`, `ci`.
+Valid features: `tests`, `ci`.
 
 ## Requirements
 
@@ -56,19 +57,20 @@ Valid features: `entities`, `admin`, `frontend`, `api`, `assets`, `tests`, `ci`.
 
 ## What you get
 
+Always:
+
+- `composer.json` with the plugin wiring (`type`, `extra.forumify-plugin-class`, autoload)
+- the plugin class, plus service and route configuration
+- `phpcs.xml` and `phpstan.neon` (level 8), runnable with `make quality`
+- a `Makefile`, `.editorconfig`, `.gitignore` and a `migrations/` directory
+- a README explaining where controllers, entities, templates and translations go
+
+Optionally:
+
 | Question | What it generates |
 | --- | --- |
-| Database entities | An example entity, its repository and a first migration |
-| Admin section | An admin page, a permission, and an entry in the admin settings menu |
-| Frontend page | A controller, route and template your members can visit |
-| API Platform resources | API operations on the example entity, plus API tests |
-| Stimulus assets | An example Stimulus controller and eslint config |
-| Test suite | phpunit, wired to `Forumify\Testing`, with unit and application examples |
+| Test suite | phpunit wired to `Forumify\Testing`, plus a test proving the plugin boots |
 | GitHub Actions | Workflows running the tests and the quality checks |
-
-Always included: `composer.json` with the plugin wiring, the plugin class, service and
-route configuration, `phpcs.xml`, `phpstan.neon` (level 8), a `Makefile`, `.editorconfig`
-and a README for the generated plugin.
 
 ## How this repository works
 
@@ -84,18 +86,20 @@ Generation is plain string replacement of the skeleton's own identity:
 | `Forumify\PluginSkeleton` | your namespace |
 | `ForumifyPluginSkeletonPlugin` | your plugin class |
 | `Plugin Skeleton` | your plugin's display name |
-| `plugin-skeleton` / `plugin_skeleton` | slugged and snake_cased forms |
+| `plugin-skeleton` / `plugin_skeleton` | slugged and snake_cased forms of the display name |
 
 Optional parts are wrapped in markers that are stripped when you decline them, and kept
 (without the markers) when you accept:
 
-```php
-// skeleton:if admin
-public function getPermissions(): array { /* ... */ }
-// skeleton:endif
+```makefile
+# skeleton:if tests
+tests:
+	make setup-tests
+	make run-tests
+# skeleton:endif
 ```
 
-`// skeleton:if !admin` inverts the condition. The comment character is ignored, so the
+`# skeleton:if !tests` inverts the condition. The comment character is ignored, so the
 same markers work in PHP, YAML, Twig, Makefiles and Markdown.
 
 The generator lives in [`skeleton/Installer.php`](skeleton/Installer.php) and runs from

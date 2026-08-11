@@ -7,6 +7,18 @@ namespace Forumify\PluginSkeleton;
 use Forumify\Plugin\AbstractForumifyPlugin;
 use Forumify\Plugin\PluginMetadata;
 
+/**
+ * The entry point forumify uses to recognise this package as a plugin.
+ *
+ * Override getPermissions() to declare permissions your plugin checks, for example:
+ *
+ *     public function getPermissions(): array
+ *     {
+ *         return ['admin' => ['example' => ['view', 'manage']]];
+ *     }
+ *
+ * They are then checked as "<slugged-plugin-name>.admin.example.view".
+ */
 class ForumifyPluginSkeletonPlugin extends AbstractForumifyPlugin
 {
     public function getPluginMetadata(): PluginMetadata
@@ -18,24 +30,4 @@ class ForumifyPluginSkeletonPlugin extends AbstractForumifyPlugin
             'https://plugin.example.com',
         );
     }
-
-    // skeleton:if admin
-    /**
-     * Permissions your plugin adds.
-     *
-     * They are checked as "<slugged-plugin-name>.admin.example.view", where the prefix
-     * is the plugin name from the metadata above.
-     */
-    public function getPermissions(): array
-    {
-        return [
-            'admin' => [
-                'example' => [
-                    'view',
-                    'manage',
-                ],
-            ],
-        ];
-    }
-    // skeleton:endif
 }

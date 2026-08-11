@@ -1,14 +1,15 @@
-# skeleton:if frontend
-plugin_skeleton:
-    resource: ../src/Controller
-    type: attribute
-    name_prefix: forumify_plugin_skeleton_
-# skeleton:endif
-
-# skeleton:if admin
-plugin_skeleton_admin:
-    resource: ../src/Admin/Controller
-    type: attribute
-    name_prefix: forumify_admin_
-    prefix: admin/
-# skeleton:endif
+# Routes are only loaded while your plugin is active. Uncomment once you add controllers.
+#
+# plugin_skeleton:
+#     resource: ../src/Controller
+#     type: attribute
+#     name_prefix: forumify_plugin_skeleton_
+#
+# Admin controllers belong behind the /admin prefix, and forumify expects their route
+# names to start with forumify_admin_:
+#
+# plugin_skeleton_admin:
+#     resource: ../src/Admin/Controller
+#     type: attribute
+#     name_prefix: forumify_admin_
+#     prefix: admin/

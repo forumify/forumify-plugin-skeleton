@@ -27,7 +27,6 @@ final class Installer
     private const ROUTE_PREFIX = 'forumify_plugin_skeleton';
     private const SLUG = 'plugin-skeleton';
     private const SNAKE = 'plugin_skeleton';
-    private const TABLE = 'plugin_skeleton_example';
     private const DISPLAY_NAME = 'Plugin Skeleton';
     private const DESCRIPTION = 'A starting point for building forumify plugins.';
     // Deliberately distinctive: a placeholder like "forumify" would also match
@@ -35,30 +34,20 @@ final class Installer
     private const AUTHOR = 'Skeleton Author';
     private const HOMEPAGE = 'https://plugin.example.com';
 
-    /** Paths removed when the matching feature is not wanted. */
+    /**
+     * Paths removed when the matching feature is not wanted.
+     *
+     * The skeleton deliberately generates no example controllers, entities or templates:
+     * you would only have to delete them. What is left is a plugin forumify recognises,
+     * with the tooling already set up.
+     */
     private const FEATURE_PATHS = [
-        'entities' => [
-            'src/Entity',
-            'src/Repository',
-            'migrations',
-            'tests/Tests/Unit/EntityTest.php',
-            'tests/Tests/Factories/ExampleFactory.php',
-        ],
-        'admin' => ['src/Admin', 'src/Form', 'templates/admin'],
-        'frontend' => ['src/Controller', 'templates/frontend', 'tests/Tests/Application/FrontendControllerTest.php'],
-        'api' => ['tests/Tests/Application/ApiTest.php'],
-        'assets' => ['assets'],
         // .env only configures the test application, nothing else reads it.
         'tests' => ['tests', 'phpunit.xml.dist', '.env', '.github/workflows/tests.yml'],
         'ci' => ['.github'],
     ];
 
     private const FEATURE_QUESTIONS = [
-        'entities' => 'Database entities, repositories and migrations',
-        'admin' => 'An admin section, with a permission and a settings form',
-        'frontend' => 'A page your members can visit',
-        'api' => 'API Platform resources',
-        'assets' => 'Stimulus controllers and other frontend assets',
         'tests' => 'A test suite (phpunit, wired up to forumify\'s test kit)',
         'ci' => 'GitHub Actions workflows for tests and code quality',
     ];
@@ -121,7 +110,6 @@ final class Installer
             self::NAMESPACE . '\\\\' => str_replace('\\', '\\\\', $namespace) . '\\\\',
             self::NAMESPACE => $namespace,
             self::ROUTE_PREFIX => $this->snake($package),
-            self::TABLE => $this->snake($displayName) . '_example',
             self::SLUG => $this->slug($displayName),
             self::SNAKE => $this->snake($displayName),
             self::DISPLAY_NAME => $displayName,
@@ -234,17 +222,10 @@ final class Installer
         }
 
         $this->io->write('');
-        $this->io->write('<info>What should the plugin start with?</info>');
-        $this->io->write('Anything you leave out is simply not generated, you can always add it later.');
+        $this->io->write('<info>What should the plugin come with?</info>');
 
         $features = [];
         foreach (self::FEATURE_QUESTIONS as $feature => $question) {
-            // The api example exposes the entity, so it is pointless on its own.
-            if ($feature === 'api' && !($features['entities'] ?? false)) {
-                $features[$feature] = false;
-                continue;
-            }
-
             $features[$feature] = $this->confirm($question, true);
         }
 

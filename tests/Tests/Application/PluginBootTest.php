@@ -9,8 +9,11 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 /**
  * Proves the plugin is installed, registered and boots inside a real forumify
- * application. If this fails, something is wrong with the plugin's wiring rather than
- * with your own code.
+ * application. If this ever fails, something is wrong with the plugin's wiring rather
+ * than with your own code.
+ *
+ * Add your own tests alongside it: anything that needs forumify running belongs in
+ * tests/Tests/Application, anything that doesn't belongs in tests/Tests/Unit.
  */
 class PluginBootTest extends KernelTestCase
 {

@@ -14,23 +14,50 @@ A starting point for building forumify plugins.
 
 ## What's in here
 
+This is a bare plugin: forumify recognises it, the tooling is set up, and nothing else is
+assumed about what you're building.
+
 ```
-src/                      Your plugin's code
-  Forumify\PluginSkeleton\ForumifyPluginSkeletonPlugin.php   Plugin class: name, author, permissions
+src/
+  ForumifyPluginSkeletonPlugin.php   Plugin class: name, author, permissions
 config/
   services.yaml           Everything in src/ is registered as a service
   routes.yaml             Where your controllers' routes are mounted
-templates/                Twig templates, referenced as @ForumifyPluginSkeletonPlugin/...
-translations/             Translation files
 migrations/               Database migrations
 tests/                    Your test suite, see "Testing" below
 ```
 
-Your plugin is a Symfony bundle. forumify finds it through `type: forumify-plugin` and
-`extra.forumify-plugin-class` in `composer.json`, and loads everything in `config/`
-automatically. Entities in `src/Entity`, migrations in `migrations/` and API resources are
-registered for you based on where the plugin is installed, so you never write a vendor
-path yourself.
+Two things in `composer.json` make it a plugin:
+
+```json
+{
+    "type": "forumify-plugin",
+    "extra": {
+        "forumify-plugin-class": "Forumify\\PluginSkeleton\\ForumifyPluginSkeletonPlugin"
+    }
+}
+```
+
+forumify discovers installed plugins by that package type, and boots the class named in
+`extra`. Everything in `config/` is loaded for you.
+
+## Where things go
+
+Your plugin is a Symfony bundle, so most of this is ordinary Symfony.
+
+| What you want to add | Where it goes |
+| --- | --- |
+| A page for your members | A controller in `src/Controller`, then uncomment the frontend block in `config/routes.yaml` |
+| An admin page | A controller in `src/Admin/Controller`, then uncomment the admin block in `config/routes.yaml` |
+| Database entities | `src/Entity`, with repositories in `src/Repository` extending `Forumify\Core\Repository\AbstractRepository` |
+| Templates | `templates/`, referenced as `@ForumifyPluginSkeletonPlugin/frontend/your_template.html.twig` |
+| Translations | `translations/messages+intl-icu.en.yaml` |
+| Permissions | `getPermissions()` on your plugin class, checked as `<slugged-plugin-name>.admin.example.view` |
+| Stimulus controllers | `assets/dist`, listed under `symfony.controllers` in an `assets/package.json` |
+
+Entities in `src/Entity`, your `migrations/` directory and API Platform resources are
+registered automatically, resolved from wherever the plugin is installed, so you never
+write a vendor path yourself.
 
 ## Developing against a forumify instance
 
@@ -67,9 +94,33 @@ make run-tests      # just phpunit, when the database is already set up
 - `tests/Tests/Unit` — no kernel, no database, fast.
 - `tests/Tests/Application` — boots forumify and makes real requests.
 
-forumify ships the plumbing: the kernel, the test configuration, and factories for its own
-entities under `Forumify\Testing\Factories`. Your `tests/` directory only holds your own
-tests, which is why there is so little in it.
+The included `PluginBootTest` proves your plugin is registered and boots. forumify ships
+the rest of the plumbing: the test kernel, the test configuration, and factories for its
+own entities under `Forumify\Testing\Factories`.
+
+```php
+use Forumify\Testing\Factories\Core\UserFactory;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Zenstruck\Foundry\Test\Factories;
+
+class YourControllerTest extends WebTestCase
+{
+    use Factories;
+
+    public function testItLoads(): void
+    {
+        $client = static::createClient();
+        UserFactory::createOne(['username' => 'tester']);
+
+        $client->request('GET', '/your-page');
+
+        self::assertResponseIsSuccessful();
+    }
+}
+```
+
+For API resources, extend `Forumify\Testing\Api\ApiTestCase` and use the CRUD traits,
+which cover the standard operations for you.
 
 ## Code quality
 
@@ -82,17 +133,16 @@ Both run in CI on every push and pull request.
 
 ## Migrations
 
-After changing an entity, generate a migration:
+After adding or changing an entity, generate a migration:
 
 ```bash
 make migration
 ```
 
-Review the generated file before committing it. Keep migrations in the
-`ForumifyPluginSkeletonPluginMigrations` namespace: forumify registers your migrations
-directory under the namespace the files declare, and that name is stored in the database
-as part of the executed versions. Renaming it later would make doctrine re-run migrations
-that have already been applied.
+Review the generated file before committing it. Keep migrations in the namespace the
+first one uses: forumify registers your migrations directory under the namespace the
+files declare, and that name is stored in the database as part of the executed versions.
+Renaming it later would make doctrine re-run migrations that have already been applied.
 
 ## Publishing
 
