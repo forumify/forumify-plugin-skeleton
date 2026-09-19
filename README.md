@@ -4,8 +4,6 @@ Generates a bare [forumify](https://forumify.net) plugin: registered with the pl
 with quality tooling, a test suite wired up to forumify's test kit, GitHub Actions
 workflows and a README explaining where things go.
 
-No example controllers, entities or templates — nothing to delete before you start.
-
 ## Usage
 
 ```bash
