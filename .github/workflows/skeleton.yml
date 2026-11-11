@@ -16,11 +16,17 @@ jobs:
       matrix:
         include:
           - name: everything
+            type: plugin
             features: tests,ci
           - name: no tests
+            type: plugin
             features: ci
           - name: nothing
+            type: plugin
             features: ''
+          - name: theme
+            type: theme
+            features: ci
 
     services:
       mysql:
@@ -44,9 +50,10 @@ jobs:
           tools: composer
           extensions: mbstring, xml, ctype, iconv, intl, mysql
 
-      - name: Generate a plugin
+      - name: Generate a ${{ matrix.type }}
         env:
-          SKELETON_PACKAGE: acme/generated-plugin
+          SKELETON_TYPE: ${{ matrix.type }}
+          SKELETON_PACKAGE: acme/generated-${{ matrix.type }}
           SKELETON_NAME: Generated
           SKELETON_FEATURES: ${{ matrix.features }}
         run: |
@@ -60,6 +67,23 @@ jobs:
           test ! -d skeleton
           test -f README.md
           ! grep -rq "PluginSkeleton" --include='*.php' --include='*.json' src composer.json
+          test "$(jq -r .type composer.json)" = "forumify-${{ matrix.type }}"
+
+      - name: Check the theme's wiring
+        if: matrix.type == 'theme'
+        working-directory: generated
+        run: |
+          test ! -d config && test ! -d migrations && test ! -d tests
+          php -r '
+            require "vendor/autoload.php";
+            $class = json_decode(file_get_contents("composer.json"), true)["extra"]["forumify-plugin-class"];
+            $theme = new $class();
+            if (!$theme instanceof Forumify\Plugin\AbstractForumifyTheme) { fwrite(STDERR, "$class is not a theme\n"); exit(1); }
+            if ($theme->getThemeConfig()->vars === []) { fwrite(STDERR, "$class has no theme variables\n"); exit(1); }
+            foreach ($theme->getStylesheets() as $stylesheet) {
+              if (!is_file("public/$stylesheet")) { fwrite(STDERR, "public/$stylesheet does not exist\n"); exit(1); }
+            }
+          '
 
       - name: Run quality checks
         working-directory: generated

@@ -8,11 +8,14 @@ use Composer\IO\IOInterface;
 use Composer\Script\Event;
 
 /**
- * Turns this skeleton into a plugin of your own.
+ * Turns this skeleton into a plugin or theme of your own.
  *
  * Runs automatically after `composer create-project forumify/plugin-skeleton`. It asks
  * for the things it cannot guess, rewrites the skeleton's placeholders, drops the parts
  * you said you don't need, and then deletes itself.
+ *
+ * The skeleton itself is a plugin. A theme is generated from it by removing what only a
+ * plugin uses and laying the files in skeleton/theme over the top.
  */
 final class Installer
 {
@@ -34,6 +37,20 @@ final class Installer
     private const AUTHOR = 'Skeleton Author';
     private const HOMEPAGE = 'https://plugin.example.com';
 
+    private const TYPES = ['plugin', 'theme'];
+
+    /**
+     * Paths only a plugin has use for. A theme is not a Symfony bundle, so forumify never
+     * loads its service or route configuration, nor runs its migrations.
+     */
+    private const PLUGIN_ONLY_PATHS = ['config', 'migrations'];
+
+    /**
+     * Features that don't apply to themes. forumify's test kit boots plugins as bundles,
+     * and a theme has no bundle to boot.
+     */
+    private const PLUGIN_ONLY_FEATURES = ['tests'];
+
     /**
      * Paths removed when the matching feature is not wanted.
      *
@@ -54,7 +71,7 @@ final class Installer
 
     /**
      * Files that are never part of a generated plugin. The skeleton's own README is not
-     * listed: installReadme() overwrites it with the generated plugin's README.
+     * listed: applyType() overwrites it with the generated plugin's or theme's README.
      */
     private const SKELETON_ONLY = ['skeleton', '.github/workflows/skeleton.yml'];
 
@@ -66,7 +83,7 @@ final class Installer
         $installer = new self($io, $root);
 
         $io->write('');
-        $io->write('<info>Setting up your forumify plugin</info>');
+        $io->write('<info>Setting up your forumify plugin or theme</info>');
         $io->write('Press enter to accept the [default] shown for each question.');
         $io->write('');
 
@@ -89,18 +106,19 @@ final class Installer
 
     private function install(): void
     {
+        $type = $this->askType();
         $package = $this->askPackage();
         [$vendor, $shortName] = explode('/', $package);
 
         $namespace = $this->askNamespace($vendor, $shortName);
-        $pluginClass = $this->askPluginClass($vendor, $shortName);
-        $displayName = $this->ask('Plugin name, as your users will see it', $this->titleize($shortName), 'name');
-        $description = $this->ask('Description', "$displayName plugin for forumify", 'description');
+        $pluginClass = $this->askPluginClass($vendor, $shortName, $type);
+        $displayName = $this->ask(ucfirst($type) . ' name, as your users will see it', $this->titleize($shortName), 'name');
+        $description = $this->ask('Description', "$displayName $type for forumify", 'description');
         $author = $this->ask('Author', $vendor, 'author');
         $homepage = $this->ask('Homepage', '', 'homepage');
         $license = $this->askLicense();
         $platform = $this->ask('Minimum forumify version', '^1.3', 'platform');
-        $features = $this->askFeatures();
+        $features = $this->askFeatures($type);
 
         $replacements = [
             // The class name first: it starts with the same characters as the namespace
@@ -109,6 +127,8 @@ final class Installer
             self::PACKAGE => $package,
             self::NAMESPACE . '\\\\' => str_replace('\\', '\\\\', $namespace) . '\\\\',
             self::NAMESPACE => $namespace,
+            // As it appears in JSON, for example the README's composer.json snippet.
+            str_replace('\\', '\\\\', self::NAMESPACE) => str_replace('\\', '\\\\', $namespace),
             self::ROUTE_PREFIX => $this->snake($package),
             self::SLUG => $this->slug($displayName),
             self::SNAKE => $this->snake($displayName),
@@ -124,17 +144,45 @@ final class Installer
         $this->io->write('Generating <info>' . $package . '</info>...');
 
         $this->removeUnwantedFeatures($features);
-        $this->applyToAllFiles($replacements, $features);
+        $this->applyType($type);
+        // The type doubles as a condition, so files can hold "skeleton:if theme" blocks.
+        $conditions = $features + ['plugin' => $type === 'plugin', 'theme' => $type === 'theme'];
+        $this->applyToAllFiles($replacements, $conditions);
         $this->renamePluginClass($pluginClass);
-        $this->writeComposerJson($package, $description, $license, $homepage, $namespace, $pluginClass, $platform, $features);
-        $this->installReadme();
+        $this->writeComposerJson($type, $package, $description, $license, $homepage, $namespace, $pluginClass, $platform, $features);
         $this->writeLicense($license, $author);
         $this->removeSkeleton();
         $this->refreshAutoloader();
         $this->formatGeneratedCode();
         $this->initialiseGit();
 
-        $this->writeNextSteps($package, $features);
+        $this->writeNextSteps($type, $features);
+    }
+
+    private function askType(): string
+    {
+        $override = $this->env('type');
+        if ($override !== null) {
+            if (!\in_array($override, self::TYPES, true)) {
+                throw new \RuntimeException('"' . $override . '" is not a valid type, expected one of: ' . implode(', ', self::TYPES) . '.');
+            }
+
+            return $override;
+        }
+
+        if (!$this->io->isInteractive()) {
+            return self::TYPES[0];
+        }
+
+        $choice = $this->io->select(
+            'What are you building? [<comment>plugin</comment>]: ',
+            self::TYPES,
+            '0',
+            false,
+            'Pick 0 or 1.',
+        );
+
+        return self::TYPES[(int)$choice];
     }
 
     private function askPackage(): string
@@ -158,7 +206,7 @@ final class Installer
 
     private function askNamespace(string $vendor, string $shortName): string
     {
-        $default = $this->studly($vendor) . '\\' . $this->studly($this->stripPluginSuffix($shortName));
+        $default = $this->studly($vendor) . '\\' . $this->studly($this->stripTypeSuffix($shortName));
 
         while (true) {
             $namespace = trim($this->ask('PHP namespace', $default, 'namespace'), '\\');
@@ -175,11 +223,11 @@ final class Installer
         }
     }
 
-    private function askPluginClass(string $vendor, string $shortName): string
+    private function askPluginClass(string $vendor, string $shortName, string $type): string
     {
-        $default = $this->studly($vendor) . $this->studly($this->stripPluginSuffix($shortName)) . 'Plugin';
+        $default = $this->studly($vendor) . $this->studly($this->stripTypeSuffix($shortName)) . ucfirst($type);
 
-        return $this->ask('Plugin class name', $default, 'plugin_class');
+        return $this->ask(ucfirst($type) . ' class name', $default, 'plugin_class');
     }
 
     private function askLicense(): string
@@ -209,27 +257,41 @@ final class Installer
     /**
      * @return array<string, bool>
      */
-    private function askFeatures(): array
+    private function askFeatures(string $type): array
     {
+        $questions = self::FEATURE_QUESTIONS;
+        if ($type === 'theme') {
+            $questions = array_diff_key($questions, array_flip(self::PLUGIN_ONLY_FEATURES));
+            $questions['ci'] = 'A GitHub Actions workflow for code quality';
+        }
+
+        $unavailable = array_fill_keys(array_keys(array_diff_key(self::FEATURE_QUESTIONS, $questions)), false);
+
         $selected = $this->env('features');
         if ($selected !== null) {
             $wanted = array_filter(array_map('trim', explode(',', $selected)));
 
-            return array_map(
-                static fn (string $feature): bool => \in_array($feature, $wanted, true),
-                array_combine(array_keys(self::FEATURE_QUESTIONS), array_keys(self::FEATURE_QUESTIONS)),
-            );
+            foreach (array_intersect($wanted, array_keys($unavailable)) as $feature) {
+                $this->io->writeError('<comment>A ' . $type . ' cannot have "' . $feature . '", leaving it out.</comment>');
+            }
+
+            $features = [];
+            foreach (array_keys($questions) as $feature) {
+                $features[$feature] = \in_array($feature, $wanted, true);
+            }
+
+            return $features + $unavailable;
         }
 
         $this->io->write('');
-        $this->io->write('<info>What should the plugin come with?</info>');
+        $this->io->write('<info>What should the ' . $type . ' come with?</info>');
 
         $features = [];
-        foreach (self::FEATURE_QUESTIONS as $feature => $question) {
+        foreach ($questions as $feature => $question) {
             $features[$feature] = $this->confirm($question, true);
         }
 
-        return $features;
+        return $features + $unavailable;
     }
 
     /**
@@ -245,6 +307,47 @@ final class Installer
             foreach (self::FEATURE_PATHS[$feature] ?? [] as $path) {
                 $this->remove($this->root . '/' . $path);
             }
+        }
+    }
+
+    /**
+     * Copies skeleton/<type> over the project: the README for either type, and for a
+     * theme also its own files. The theme class uses the plugin class's placeholder
+     * name, so the replacements and renamePluginClass() treat both types alike.
+     */
+    private function applyType(string $type): void
+    {
+        if ($type === 'theme') {
+            foreach (self::PLUGIN_ONLY_PATHS as $path) {
+                $this->remove($this->root . '/' . $path);
+            }
+        }
+
+        $this->copyDirectory($this->root . '/skeleton/' . $type, $this->root);
+    }
+
+    private function copyDirectory(string $source, string $target): void
+    {
+        if (!is_dir($source)) {
+            return;
+        }
+
+        /** @var \SplFileInfo $file */
+        foreach (new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($source, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST,
+        ) as $file) {
+            $destination = $target . substr($file->getPathname(), \strlen($source));
+
+            if ($file->isDir()) {
+                if (!is_dir($destination)) {
+                    mkdir($destination, 0777, true);
+                }
+
+                continue;
+            }
+
+            copy($file->getPathname(), $destination);
         }
     }
 
@@ -317,6 +420,7 @@ final class Installer
      * @param array<string, bool> $features
      */
     private function writeComposerJson(
+        string $type,
         string $package,
         string $description,
         string $license,
@@ -340,6 +444,13 @@ final class Installer
         $composer['require']['forumify/forumify-platform'] = $platform;
         $composer['autoload']['psr-4'] = [$namespace . '\\' => 'src/'];
         $composer['extra']['forumify-plugin-class'] = $namespace . '\\' . $pluginClass;
+
+        if ($type === 'theme') {
+            $composer['type'] = 'forumify-theme';
+            // The theme class extends forumify's base theme.
+            $composer['require']['forumify/forumify-theme'] = '^1.0';
+            unset($composer['keywords']);
+        }
 
         if (!$features['tests']) {
             unset($composer['autoload-dev']);
@@ -414,14 +525,6 @@ final class Installer
             SOFTWARE.
 
             LICENSE);
-    }
-
-    private function installReadme(): void
-    {
-        $template = $this->root . '/skeleton/templates/README.md';
-        if (is_file($template)) {
-            rename($template, $this->root . '/README.md');
-        }
     }
 
     private function removeSkeleton(): void
@@ -499,13 +602,13 @@ final class Installer
     /**
      * @param array<string, bool> $features
      */
-    private function writeNextSteps(string $package, array $features): void
+    private function writeNextSteps(string $type, array $features): void
     {
         $this->io->write('');
-        $this->io->write('<info>Done.</info> Your plugin lives in ' . $this->root);
+        $this->io->write('<info>Done.</info> Your ' . $type . ' lives in ' . $this->root);
         $this->io->write('');
         $this->io->write('Next steps:');
-        $this->io->write('  1. Read README.md, it explains the layout and how to run the plugin on a forumify instance.');
+        $this->io->write('  1. Read README.md, it explains the layout and how to run the ' . $type . ' on a forumify instance.');
 
         if ($features['tests']) {
             $this->io->write('  2. Start a database, then run <comment>make tests</comment>.');
@@ -516,9 +619,8 @@ final class Installer
 
         $this->io->write('');
         $this->io->write('Install it into a forumify instance with a path repository, see README.md.');
-        $this->io->write('Documentation: <comment>https://docs.forumify.net/guides/plugin</comment>');
+        $this->io->write('Documentation: <comment>https://docs.forumify.net/guides/' . $type . '</comment>');
         $this->io->write('');
-        unset($package);
     }
 
     /**
@@ -605,9 +707,9 @@ final class Installer
         );
     }
 
-    private function stripPluginSuffix(string $name): string
+    private function stripTypeSuffix(string $name): string
     {
-        return preg_replace('/[-_]?plugin$/i', '', $name) ?: $name;
+        return preg_replace('/[-_]?(plugin|theme)$/i', '', $name) ?: $name;
     }
 
     private function studly(string $value): string
@@ -627,6 +729,6 @@ final class Installer
 
     private function titleize(string $value): string
     {
-        return ucwords(str_replace(['-', '_'], ' ', $this->stripPluginSuffix($value)));
+        return ucwords(str_replace(['-', '_'], ' ', $this->stripTypeSuffix($value)));
     }
 }
